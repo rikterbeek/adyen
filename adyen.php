@@ -38,7 +38,7 @@ class Adyen extends PaymentModule
 	{
 		$this->name = 'adyen';
 		$this->tab = 'payments_gateways';
-		$this->version = '2.6.1';
+		$this->version = '2.6.2';
 		$this->author = 'Adyen';
 		$this->bootstrap = true;
 		$this->is_eu_compatible = 1;
@@ -644,169 +644,168 @@ class Adyen extends PaymentModule
 	{
 		if (!$this->active)
 			return;
-			
-			// HPP must be enabled to select
+
+		// HPP must be enabled to select
 		if (Configuration::get('ADYEN_HPP_ENABLED') == true)
 		{
 			$cart = $this->context->cart;
 			if (!$this->checkCurrency($cart))
 				Tools::redirect('index.php?controller=order');
-			
+
 			$hpp_options = $this->getHppOptions();
 
-            if (is_array($hpp_options) && count($hpp_options))
-            {
-                $this->context->smarty->assign(array (
-                    'hpp_options' => $hpp_options,
-                    'nbProducts' => $cart->nbProducts(),
-                    'cust_currency' => $cart->id_currency,
-                    'currencies' => $this->getCurrency((int)$cart->id_currency),
-                    'total' => $cart->getOrderTotal(true, Cart::BOTH),
-                    'this_path' => $this->getPathUri(),
-                    'this_path_ssl' => Tools::getShopDomainSsl(true, true).__PS_BASE_URI__.'modules/'.$this->name.'/'
-                ));
+			$this->context->smarty->assign(array(
+				'hpp_options' => $hpp_options,
+				'nbProducts' => $cart->nbProducts(),
+				'cust_currency' => $cart->id_currency,
+				'currencies' => $this->getCurrency((int)$cart->id_currency),
+				'total' => $cart->getOrderTotal(true, Cart::BOTH),
+				'this_path' => $this->getPathUri(),
+				'this_path_ssl' => Tools::getShopDomainSsl(true, true).__PS_BASE_URI__.'modules/'.$this->name.'/'
+			));
 
-                return $this->display(__FILE__, '/views/templates/front/payment.tpl');
-            }
+			return $this->display(__FILE__, '/views/templates/front/payment.tpl');
 		}
 	}
 
-    private function getHppOptions()
-    {
-        $hpp_options = array ();
-        if (Configuration::get('ADYEN_HPP_DISABLE') == false)
-        {
-            // GET HPP options from Adyen
-            $result_array = array();
-            $cart = $this->context->cart;
+	private function getHppOptions()
+	{
+		$hpp_options = array();
+		if (Configuration::get('ADYEN_HPP_DISABLE') == false)
+		{
+			// GET HPP options from Adyen
+			$result_array = array();
+			$cart = $this->context->cart;
 
-            // get the default config values
-            $config = Configuration::getMultiple(array (
-                'ADYEN_MERCHANT_ACCOUNT',
-                'ADYEN_MODE',
-                'ADYEN_SKIN_CODE',
-                'ADYEN_COUNTRY_CODE_ISO',
-            ));
+			// get the default config values
+			$config = Configuration::getMultiple(array(
+						'ADYEN_MERCHANT_ACCOUNT',
+						'ADYEN_MODE',
+						'ADYEN_SKIN_CODE',
+						'ADYEN_COUNTRY_CODE_ISO',
+			));
 
-            $currency = $this->context->currency;
-            $currency_code = (string)$currency->iso_code;
-            $skin_code = (string)$config['ADYEN_SKIN_CODE'];
-            $merchant_account = (string)$config['ADYEN_MERCHANT_ACCOUNT'];
-            $payment_amount = number_format($cart->getOrderTotal(true, 3), 2, '', '');
-            $session_validity = date(DATE_ATOM, mktime(date('H') + 1, date('i'), date('s'), date('m'), date('j'), date('Y')));
+			$currency = $this->context->currency;
+			$currency_code = (string)$currency->iso_code;
+			$skin_code = (string)$config['ADYEN_SKIN_CODE'];
+			$merchant_account = (string)$config['ADYEN_MERCHANT_ACCOUNT'];
+			$payment_amount = number_format($cart->getOrderTotal(true, 3), 2, '', '');
+			$session_validity = date(DATE_ATOM, mktime(date('H') + 1, date('i'), date('s'), date('m'), date('j'), date('Y')));
 
-            if ($config['ADYEN_COUNTRY_CODE_ISO'] != '')
-                $country_code = (string)$config['ADYEN_COUNTRY_CODE_ISO'];
-            else
-                $country_code = (string)$this->context->country->iso_code;
+			if ($config['ADYEN_COUNTRY_CODE_ISO'] != '')
+				$country_code = (string)$config['ADYEN_COUNTRY_CODE_ISO'];
+			else
+				$country_code = (string)$this->context->country->iso_code;
 
-            $request = array(
-                "paymentAmount" => $payment_amount,
-                "currencyCode" => $currency_code,
-                "merchantReference" => "Get Payment methods",
-                "skinCode" => $skin_code,
-                "merchantAccount" => $merchant_account,
-                "sessionValidity" => $session_validity,
-                "countryCode" => $country_code,
-                "merchantSig" => "",
-            );
+			$request = array(
+				"paymentAmount" => $payment_amount,
+				"currencyCode" => $currency_code,
+				"merchantReference" => "Get Payment methods",
+				"skinCode" => $skin_code,
+				"merchantAccount" => $merchant_account,
+				"sessionValidity" => $session_validity,
+				"countryCode" => $country_code,
+				"shopperLocale" => $country_code,
+				"merchantSig" => "",
+			);
 
-            $hmac_data = $request['paymentAmount'] .
-                $request['currencyCode'] .
-                $request['merchantReference'] .
-                $request['skinCode'] .
-                $request['merchantAccount'] .
-                $request['sessionValidity'];
+			$hmac_data = $request['paymentAmount'].
+					$request['currencyCode'].
+					$request['merchantReference'].
+					$request['skinCode'].
+					$request['merchantAccount'].
+					$request['sessionValidity'];
 
-            //Generate HMAC encrypted merchant signature
-            $merchant_sig = base64_encode(pack('H*', $this->getHmacsha1($this->getHmac(), $hmac_data)));
-            $request['merchantSig'] = $merchant_sig;
+			//Generate HMAC encrypted merchant signature
+			$merchant_sig = base64_encode(pack('H*', $this->getHmacsha1($this->getHmac(), $hmac_data)));
+			$request['merchantSig'] = $merchant_sig;
 
-            $ch = curl_init();
+			$ch = curl_init();
 
-            if ($config['ADYEN_MODE'] == 'live')
-                curl_setopt($ch, CURLOPT_URL, "https://live.adyen.com/hpp/directory.shtml");
-            else
-                curl_setopt($ch, CURLOPT_URL, "https://test.adyen.com/hpp/directory.shtml");
+			if ($config['ADYEN_MODE'] == 'live')
+				curl_setopt($ch, CURLOPT_URL, "https://live.adyen.com/hpp/directory.shtml");
+			else
+				curl_setopt($ch, CURLOPT_URL, "https://test.adyen.com/hpp/directory.shtml");
 
-            curl_setopt($ch, CURLOPT_HEADER, false);
-            curl_setopt($ch, CURLOPT_POST,count($request));
-            curl_setopt($ch, CURLOPT_POSTFIELDS,http_build_query($request));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); // do not print results if you do curl_exec
+			curl_setopt($ch, CURLOPT_HEADER, false);
+			curl_setopt($ch, CURLOPT_POST, count($request));
+			curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($request));
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE); // do not print results if you do curl_exec
 
-            $results = curl_exec($ch);
+			$results = curl_exec($ch);
 
-            if ($results === false)
-                echo "Error: " . curl_error($ch);
-            else
-            {
-                /**
-                 * The $result contains a JSON array containing
-                 * the available payment methods for the merchant account.
-                 */
-                $results_json = json_decode($results);
+			if ($results === false)
+				echo "Error: ".curl_error($ch);
+			else
+			{
+				/**
+				 * The $result contains a JSON array containing
+				 * the available payment methods for the merchant account.
+				 */
+				$results_json = json_decode($results);
 
-                if($results_json == null)
-                    // no valid json so show the error
-                    echo $results;
+				if ($results_json == null)
+				// no valid json so show the error
+					echo $results;
 
-                $payment_methods = $results_json->paymentMethods;
+				$payment_methods = $results_json->paymentMethods;
 
-                foreach($payment_methods as $payment_method)
-                {
-                    $result_array[$payment_method->brandCode]['name'] = $payment_method->name;
+				foreach ($payment_methods as $payment_method)
+				{
+					$result_array[$payment_method->brandCode]['name'] = $payment_method->name;
 
-                    if (isset($payment_method->issuers))
-                    {
-                        // for ideal go through the issuers
-                        if(count($payment_method->issuers) > 0)
-                            foreach($payment_method->issuers as $issuer)
-                                $result_array[$payment_method->brandCode]['issuers'][$issuer->issuerId] = $issuer->name;
+					if (isset($payment_method->issuers))
+					{
+						// for ideal go through the issuers
+						if (count($payment_method->issuers) > 0)
+							foreach ($payment_method->issuers as $issuer)
+								$result_array[$payment_method->brandCode]['issuers'][$issuer->issuerId] = $issuer->name;
 
-                        ksort($result_array[$payment_method->brandCode]['issuers']); // sort on key
-                    }
-                }
-            }
-            // get list of hpp options this has only the value
-            $hpp_options = $result_array;
-        }
-        return $hpp_options;
-    }
-	
-	public function hookDisplayPaymentEU($params) {
+						ksort($result_array[$payment_method->brandCode]['issuers']); // sort on key
+					}
+				}
+			}
+			// get list of hpp options this has only the value
+			$hpp_options = $result_array;
+		}
+		return $hpp_options;
+	}
+
+	public function hookDisplayPaymentEU($params)
+	{
 		if (!$this->active)
 			return;
 
-        // HPP must be enabled to select
-        if (Configuration::get('ADYEN_HPP_ENABLED') == true)
-        {
-            $cart = $this->context->cart;
-            if (!$this->checkCurrency($cart))
-                return;
+		// HPP must be enabled to select
+		if (Configuration::get('ADYEN_HPP_ENABLED') == true)
+		{
+			$cart = $this->context->cart;
+			if (!$this->checkCurrency($cart))
+				return;
 
-            $hpp_options = $this->getHppOptions();
+			$hpp_options = $this->getHppOptions();
 
-            $methods = array();
+			$methods = array();
 
-            if (is_array($hpp_options) && count($hpp_options))
-            {
-                foreach ($hpp_options as $hpp_option_title => $hpp_option)
-                {
-                    $logo = $this->_path . 'img/payment_types/' . $hpp_option_title . '.png';
+			if (is_array($hpp_options) && count($hpp_options))
+			{
+				foreach ($hpp_options as $hpp_option_title => $hpp_option)
+				{
+					$logo = $this->_path.'img/payment_types/'.$hpp_option_title.'.png';
 
-                    array_push($methods, array(
-                        'cta_text' => $this->l('Adyen') . ' ' . $hpp_option['name'],
-                        'logo' => $logo,
-                        'action' => $this->context->link->getModuleLink($this->name, 'validation'),
-                        'inputs' => array(
-                            'payment_type' => $hpp_option_title
-                        )
-                    ));
-                }
-            }
-            return count($methods) ? $methods : null;
-        }
-        return;
+					array_push($methods, array(
+						'cta_text' => $this->l('Adyen').' '.$hpp_option['name'],
+						'logo' => $logo,
+						'action' => $this->context->link->getModuleLink($this->name, 'validation'),
+						'inputs' => array(
+							'payment_type' => $hpp_option_title
+						)
+					));
+				}
+			}
+			return count($methods)?$methods:null;
+		}
+		return;
 	}
 
 	public function hookDisplayPaymentReturn($params)
