@@ -147,7 +147,7 @@ class AdyenValidationModuleFrontController extends ModuleFrontController
 		
 		if (Tools::getValue('ideal_type') != '')
 		{
-			$ideal_issuer_id = (int)Tools::getValue('ideal_type');
+			$ideal_issuer_id = sprintf('d', $ideal_issuer_id);
 			$skip_selection = 'true';
 		}
 		
