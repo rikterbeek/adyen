@@ -38,11 +38,11 @@ class Adyen extends PaymentModule
 	{
 		$this->name = 'adyen';
 		$this->tab = 'payments_gateways';
-		$this->version = '2.6.2';
+		$this->version = '2.6.3';
 		$this->author = 'Adyen';
 		$this->bootstrap = true;
 		$this->is_eu_compatible = 1;
-		
+
 		// The need_instance flag indicates whether to load the module's class when displaying the "Modules" page in the back-office
 		$this->need_instance = 1;
 
@@ -52,11 +52,11 @@ class Adyen extends PaymentModule
 
 		$this->displayName = $this->l('Adyen');
 		$this->description = $this->l('Accepts payments by Adyen\'s Hosted Payment Page.');
-		
+
 		$this->confirmUninstall = $this->l('Are you sure you want to uninstall?');
 
 	}
-	
+
 	/*
 	 * for installing the plugin
 	 */
@@ -73,13 +73,13 @@ class Adyen extends PaymentModule
 			Logger::addLog('Adyen module: installation failed!', 4);
 			return false;
 		}
-		
+
 		// execute the sql file into database
 		if (!file_exists(dirname(__FILE__).'/'.self::INSTALL_SQL_FILE))
 			return false;
 		elseif (!$sql = Tools::file_get_contents(dirname(__FILE__).'/'.self::INSTALL_SQL_FILE))
 			return false;
-		
+
 		$sql = str_replace(array (
 				'PREFIX_',
 				'ENGINE_TYPE'
@@ -88,27 +88,27 @@ class Adyen extends PaymentModule
 				_MYSQL_ENGINE_
 		), $sql);
 		$sql = preg_split('/;\s*[\r\n]+/', trim($sql));
-		
+
 		foreach ($sql as $query)
 			if (!Db::getInstance()->execute(trim($query)))
 				return false;
-			
+
 		/* insert new status */
 		Db::getInstance()->Execute('
 		INSERT INTO `'._DB_PREFIX_.'order_state` (`send_email`, `unremovable`, `color`) VALUES(0, 1, \'lightblue\')');
 		$stateid = Db::getInstance()->Insert_ID();
-		
+
 		if ($stateid > 0)
 		{
 			Configuration::updateValue('ADYEN_NEW_STATUS', $stateid); // save value in configuration
 			Db::getInstance()->Execute('INSERT INTO `'._DB_PREFIX_.'order_state_lang` (`id_order_state`, `id_lang`, `name`)
 			VALUES('.(int)$stateid.', 1, \'Adyen - Awaiting payment\')');
 		}
-		
+
 		Db::getInstance()->Execute('
 		INSERT INTO `'._DB_PREFIX_.'order_state` (`send_email`, `unremovable`, `color`) VALUES(0, 1, \'lightblue\')');
 		$stateid2 = Db::getInstance()->Insert_ID();
-		
+
 		if ($stateid2 > 0)
 		{
 			Configuration::updateValue('ADYEN_STATUS_CANCELLED', $stateid2); // save value in configuration
@@ -118,7 +118,7 @@ class Adyen extends PaymentModule
 		Logger::addLog('Adyen module: installation succeed');
 		return true;
 	}
-	
+
 	/*
 	 * for uninstall the plugin
 	 */
@@ -146,15 +146,15 @@ class Adyen extends PaymentModule
 			'ADYEN_IDEAL_ISSUERS_TEST',
 			'ADYEN_HPP_TYPES'
 		);
-		
+
 		$this->deleteByNames($names);
-		
+
 		if (!$this->unregisterHook('displayPayment') || !$this->unregisterHook('displayPaymentReturn') || !$this->unregisterHook('displayHeader') || !$this->unregisterHook('displayAdminOrder') || !$this->unregisterHook('displayBackOfficeHeader') || !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'adyen_event_data`') || !Db::getInstance()->Execute('DELETE `os`, `osl` FROM  `'._DB_PREFIX_.'order_state` AS os LEFT JOIN `'._DB_PREFIX_.'order_state_lang` AS osl ON os.id_order_state = osl.id_order_state WHERE osl.name = \'Adyen - Awaiting payment\' OR osl.name = \'Adyen - Payment Refused\'  ') || !parent::uninstall())
 		{
 			Logger::addLog('Adyen module: uninstall failed');
 			return false;
 		}
-		
+
 		Logger::addLog('Adyen module: uninstall succeed');
 		return true;
 	}
@@ -164,14 +164,14 @@ class Adyen extends PaymentModule
 		foreach ($names as $name)
 			Configuration::deleteByName($name);
 	}
-	
+
 	/*
 	 * shows the configuration page in the back-end
 	 */
 	public function getContent()
 	{
 		$output = null;
-		
+
 		if (Tools::isSubmit('submit'.$this->name))
 		{
 			// get post values
@@ -191,43 +191,43 @@ class Adyen extends PaymentModule
 			$new_order_status = (string)Tools::getValue('ADYEN_NEW_STATUS');
 			$status_authorized = (string)Tools::getValue('ADYEN_STATUS_AUTHORIZED');
 			$status_cancelled = (string)Tools::getValue('ADYEN_STATUS_CANCELLED');
-			
+
 			// validating the input
 			if (!$merchant_account || empty($merchant_account) || !Validate::isGenericName($merchant_account))
 				$output .= $this->displayError($this->l('Invalid Configuration value for Merchant Account'));
-			
+
 			if (!$notification_username || empty($notification_username) || !Validate::isGenericName($notification_username))
 				$output .= $this->displayError($this->l('Invalid Configuration value for Notification Username'));
-			
+
 			if (!$notification_password || empty($notification_password) || !Validate::isGenericName($notification_password))
 				$output .= $this->displayError($this->l('Invalid Configuration value for Notification Password'));
-				
+
 				// validate HPP settings if it is enabled
 			if ($hpp_enabled == true)
 			{
 				if (!$skin_code || empty($skin_code) || !Validate::isGenericName($skin_code))
 					$output .= $this->displayError($this->l('Invalid Configuration value for Skin code'));
-				
+
 				if (!$hmac_test || empty($hmac_test) || !Validate::isGenericName($hmac_test))
 					$output .= $this->displayError($this->l('Invalid Configuration value for HMAC Key for Test'));
-				
+
 				if (!$hmac_live || empty($hmac_live) || !Validate::isGenericName($hmac_live))
 					$output .= $this->displayError($this->l('Invalid Configuration value for HMAC Key for Live'));
-				
+
 				if (!$payment_flow || empty($payment_flow) || !Validate::isGenericName($payment_flow))
 					$output .= $this->displayError($this->l('Invalid Configuration value for Payment Flow Selection'));
-				
+
 				if (!$days_delivery || empty($days_delivery) || !Validate::isInt($days_delivery))
 					$output .= $this->displayError($this->l('Invalid Configuration value for Days for Delivery'));
 			}
-			
+
 			if ($output == null)
 			{
 				// store ADYEN_HPP_TYPES, IDEAL_ISSUERS_LIVE and ADYEN_IDEAL_ISSUERS_TEST checkbox checked values into their seperate array
 				$hpp_result = array ();
 				$ideal_issuers_live_result = array ();
 				$ideal_issuers_test_result = array ();
-				
+
 				foreach ($_POST as $key => $value)
 				{
 					if (Tools::substr($key, 0, 16) == 'ADYEN_HPP_TYPES_')
@@ -237,7 +237,7 @@ class Adyen extends PaymentModule
 					elseif (Tools::substr($key, 0, 25) == 'ADYEN_IDEAL_ISSUERS_TEST_')
 						$ideal_issuers_test_result[] = $value;
 				}
-				
+
 				// update the checkbox values
 				Configuration::updateValue('ADYEN_HPP_TYPES', implode(';', $hpp_result));
 				Configuration::updateValue('ADYEN_IDEAL_ISSUERS_LIVE', implode(';', $ideal_issuers_live_result));
@@ -260,42 +260,42 @@ class Adyen extends PaymentModule
 				Configuration::updateValue('ADYEN_NEW_STATUS', $new_order_status);
 				Configuration::updateValue('ADYEN_STATUS_AUTHORIZED', $status_authorized);
 				Configuration::updateValue('ADYEN_STATUS_CANCELLED', $status_cancelled);
-				
+
 				$output .= $this->displayConfirmation($this->l('Settings updated'));
 			}
 		}
-		
+
 		if (version_compare(_PS_VERSION_, '1.6', '>='))
 			$intro = $this->display(__FILE__, '/views/templates/admin/configuration_intro.tpl');
 		else
 			$intro = "";
-			
+
 		return $output.$intro.$this->displayForm();
 	}
 	public function displayForm()
 	{
 		// Get default Language
 		$default_lang = (int)Configuration::get('PS_LANG_DEFAULT');
-		
+
 		// get the order state id for awaiting payment (can be different id foreach customer)
 		$new_order_state_id = (int)Configuration::get('ADYEN_NEW_STATUS');
-		
+
 		// get the name of the order state
 		$language_id = (int)$this->context->language->id;
 		$rq = Db::getInstance()->getRow('
 			SELECT `name`, `name`  FROM `'._DB_PREFIX_.'order_state_lang`
 			WHERE id_lang = \''.$language_id.'\' AND  id_order_state = \''.pSQL($new_order_state_id).'\'');
-		
+
 		if ($rq && isset($rq['name']) && (string)$rq['name'] != '')
 			$name = (string)$rq['name'];
-		else 
+		else
 			$name = (string)'Adyen - Awaiting payments';
-		
+
 		$new_order_status = array (
 			'id' => $new_order_state_id,
 			'name' => $name
 		);
-			
+
 		// get all order statusses
 		$order_states_db = OrderState::getOrderStates($this->context->language->id);
 		$order_states = array ();
@@ -305,7 +305,7 @@ class Adyen extends PaymentModule
 				'id' => $order_state['id_order_state'],
 				'name' => $order_state['name']
 			);
-			
+
 			// Init Fields form array
 		$fields_form[0]['form'] = array (
 			'legend' => array (
@@ -437,7 +437,7 @@ class Adyen extends PaymentModule
 				)
 			)
 		);
-		
+
 		$fields_form[1]['form'] = array (
 				'legend' => array (
 					'title' => $this->l('Advanced Settings'),
@@ -509,26 +509,26 @@ class Adyen extends PaymentModule
 						'required' => false,
 						'hint' => $this->l('How many days to be added to the current date for delivery. ONLY numbers allowed.')
 					),
-					
+
 				),
 				'submit' => array (
 					'title' => $this->l('Save'),
 					'class' => 'btn btn-default pull-right'
 				)
 		);
-		
+
 		$helper = new HelperForm();
-		
+
 		// Module, token and currentIndex
 		$helper->module = $this;
 		$helper->name_controller = $this->name;
 		$helper->token = Tools::getAdminTokenLite('AdminModules');
 		$helper->currentIndex = AdminController::$currentIndex.'&configure='.$this->name;
-		
+
 		// Language
 		$helper->default_form_language = $default_lang;
 		$helper->allow_employee_form_lang = $default_lang;
-		
+
 		// Title and toolbar
 		$helper->title = $this->displayName;
 		$helper->show_toolbar = true; // false -> remove toolbar
@@ -544,7 +544,7 @@ class Adyen extends PaymentModule
 				'desc' => $this->l('Back to list')
 			)
 		);
-		
+
 		if (Tools::isSubmit('submit'.$this->name))
 		{
 			// get settings from post because post can give errors and you want to keep values
@@ -564,10 +564,10 @@ class Adyen extends PaymentModule
 			$status_new_order = (string)Tools::getValue('ADYEN_NEW_STATUS');
 			$status_authorized = (string)Tools::getValue('ADYEN_STATUS_AUTHORIZED');
 			$status_cancelled = (string)Tools::getValue('ADYEN_STATUS_CANCELLED');
-			
+
 			$ideal_issuers_live = explode(';', Configuration::get('ADYEN_IDEAL_ISSUERS_LIVE'));
 			$ideal_issuers_test = (string)Tools::getValue('ADYEN_IDEAL_ISSUERS_TEST');
-			
+
 			// get post values and if their were checked, checked them again
 			foreach ($_POST as $key => $value)
 			{
@@ -595,27 +595,27 @@ class Adyen extends PaymentModule
 			$days_delivery = Configuration::get('ADYEN_DAYS_DELIVERY');
 			$hpp_disable = Configuration::get('ADYEN_HPP_DISABLE');
 			$status_new_order = Configuration::get('ADYEN_NEW_STATUS');
-			
+
 			// get value from config if not exist set the default value to "PAYMENT ACCEPTED"
 			if (Configuration::get('ADYEN_STATUS_AUTHORIZED') != '')
 				$status_authorized = (string)Configuration::get('ADYEN_STATUS_AUTHORIZED');
 			else
 				$status_authorized = (string)Configuration::get('PS_OS_PAYMENT'); // default value is payment
-			
+
 			// get value from config if not exist set the default value to "Adyen - Payment Refused"
 			if (Configuration::get('ADYEN_STATUS_CANCELLED') != '')
 				$status_cancelled = (string)Configuration::get('ADYEN_STATUS_CANCELLED');
-			
+
 			foreach (explode(';', Configuration::get('ADYEN_HPP_TYPES')) as $value)
 				$helper->fields_value['ADYEN_HPP_TYPES_'.$value] = '1';
-			
+
 			foreach (explode(';', Configuration::get('ADYEN_IDEAL_ISSUERS_LIVE')) as $value)
 				$helper->fields_value['ADYEN_IDEAL_ISSUERS_LIVE_'.$value] = '1';
-			
+
 			foreach (explode(';', Configuration::get('ADYEN_IDEAL_ISSUERS_TEST')) as $value)
 				$helper->fields_value['ADYEN_IDEAL_ISSUERS_TEST_'.$value] = '1';
 		}
-		
+
 		// Load current value
 		$helper->fields_value['ADYEN_COUNTRY_CODE_ISO'] = $country_code_iso;
 		$helper->fields_value['ADYEN_LANGUAGE_LOCALE'] = $language_locale;
@@ -633,10 +633,10 @@ class Adyen extends PaymentModule
 		$helper->fields_value['ADYEN_NEW_STATUS'] = $status_new_order;
 		$helper->fields_value['ADYEN_STATUS_AUTHORIZED'] = $status_authorized;
 		$helper->fields_value['ADYEN_STATUS_CANCELLED'] = $status_cancelled;
-		
+
 		return $helper->generateForm($fields_form);
 	}
-	
+
 	/*
 	 * display payment with adyen
 	 */
@@ -812,24 +812,24 @@ class Adyen extends PaymentModule
 	{
 		if (!$this->active)
 			return;
-			
+
 		// Validate the details in the result url.
 		$get_auth_result = Tools::getValue('authResult');
 		$get_psp_reference = Tools::getValue('pspReference');
 		$get_merchant_reference = Tools::getValue('merchantReference');
 		$get_skin_code = Tools::getValue('skinCode');
 		$get_merchant_sig = Tools::getValue('merchantSig');
-		
+
 		$auth_result = (isset($get_auth_result)) ? (string)Tools::getValue('authResult') : '';
 		$psp_reference = (isset($get_psp_reference)) ? (string)Tools::getValue('pspReference') : '';
 		$merchant_reference = (isset($get_merchant_reference)) ? (int)Tools::getValue('merchantReference') : '';
 		$skin_code = (isset($get_skin_code)) ? (string)Tools::getValue('skinCode') : '';
 		$merchant_sig = (isset($get_merchant_sig)) ? (string)Tools::getValue('merchantSig') : '';
-		
+
 		// Calculate the merchant signature from the return values.
 		$hmac_data = $auth_result.$psp_reference.$merchant_reference.$skin_code;
 		$calculated_merchant_sig = base64_encode(pack('H*', $this->getHmacsha1($this->getHmac(), $hmac_data)));
-		
+
 		// Both values must be the same.
 		$template = 'error.tpl';
 
@@ -856,7 +856,7 @@ class Adyen extends PaymentModule
 					break;
 			}
 		}
-		
+
 		return $this->display(__FILE__, 'views/templates/front/result/'.$template);
 	}
 
@@ -885,12 +885,12 @@ class Adyen extends PaymentModule
 		// get psp_reference from event_data table
 		$sql = 'SELECT * FROM '._DB_PREFIX_.'adyen_event_data
 				WHERE id_order = '.(int)Tools::getValue('id_order').' ORDER BY created_at DESC';
-		
+
 		$psp_refence = '';
-		
+
 		if ($row = Db::getInstance()->getRow($sql))
 			$psp_refence = $row['psp_reference'];
-		
+
 		if ($psp_refence != '')
 		{
 			// get psp reference url
@@ -901,7 +901,7 @@ class Adyen extends PaymentModule
 		}
 		else
 			$psp_reference_text = $this->l('Payment has not been processed yet.');
-		
+
 		echo '<br /><fieldset>
 				<legend><img src="../img/admin/tab-payment.gif">Adyen Payment Information</legend>
 					'.$this->l('Adyen PSP Reference:').' '.$psp_reference_text.'<br>'.$this->l('Order was placed using').' '.$this->context->currency->iso_code.'
@@ -912,7 +912,7 @@ class Adyen extends PaymentModule
 	{
 		$currency_order = new Currency($cart->id_currency);
 		$currencies_module = $this->getCurrency($cart->id_currency);
-		
+
 		if (is_array($currencies_module))
 			foreach ($currencies_module as $currency_module)
 				if ($currency_order->id == $currency_module['id_currency'])
@@ -939,7 +939,7 @@ class Adyen extends PaymentModule
 			$hashfunc = 'sha1';
 			if (Tools::strlen($key) > $blocksize)
 				$key = pack('H*', $hashfunc($key));
-			
+
 			$key = str_pad($key, $blocksize, chr(0x00));
 			$ipad = str_repeat(chr(0x36), $blocksize);
 			$opad = str_repeat(chr(0x5c), $blocksize);
